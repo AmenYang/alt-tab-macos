@@ -18,10 +18,11 @@ jobs:
           fetch-depth: 1
 
       - name: Show toolchain
-        run: xcodebuild -version && swift --version
+        run: xcodebuild -version; swift --version; ls Pods | head
 
       - name: Build
         run: |
+          set -o pipefail
           xcodebuild -workspace alt-tab-macos.xcworkspace \
             -scheme Release \
             -configuration Release \
@@ -29,25 +30,34 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_OPTIONAL=YES \
-            2>&1 | tail -60
+            2>&1 | tee build.log
 
       - name: Locate app
+        if: always()
         run: |
-          find DerivedData/Build/Products -maxdepth 2 -name "*.app" -print
+          find DerivedData/Build/Products -maxdepth 3 -name "*.app" -print 2>/dev/null
+          find DerivedData/Build/Products -maxdepth 4 -path "*MacOS*" -print 2>/dev/null
 
       - name: Ad-hoc sign and package
+        if: always()
         run: |
-          APP="$(find DerivedData/Build/Products -maxdepth 2 -name 'AltTab.app' | head -1)"
+          APP="$(find DerivedData/Build/Products -maxdepth 3 -name 'AltTab.app' | head -1)"
           echo "APP=$APP"
-          codesign --force --deep --sign - "$APP" || true
-          ditto -c -k --sequesterRsrc --keepParent "$APP" "AltTab-10.12.0-unsigned.zip"
-          ls -lh AltTab-10.12.0-unsigned.zip
+          if [ -n "$APP" ] && [ -f "$APP/Contents/MacOS/AltTab" ]; then
+            codesign --force --deep --sign - "$APP"
+            ditto -c -k --sequesterRsrc --keepParent "$APP" "AltTab-10.12.0-unsigned.zip"
+            ls -lh "AltTab-10.12.0-unsigned.zip"
+          else
+            echo "no usable app produced"; ls -R "$APP" | head -20
+          fi
 
       - name: Publish release
+        if: always()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v10.12.0-free
           name: AltTab 10.12.0 (free build)
-          body: Built from GPL-3.0 source at tag v10.12.0, unsigned/ad-hoc signed.
-          files: AltTab-10.12.0-unsigned.zip
+          body: Built from GPL-3.0 source at tag v10.12.0.
+          files: |
+            build.log
+            AltTab-10.12.0-unsigned.zip
