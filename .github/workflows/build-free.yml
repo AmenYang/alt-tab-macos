@@ -17,26 +17,26 @@ jobs:
           ref: v10.12.0
           fetch-depth: 1
 
-      - name: Show toolchain
-        run: xcodebuild -version; swift --version; ls Pods | head
-
       - name: Build
         run: |
           set -o pipefail
+          export CODE_SIGN_IDENTITY="-"
           xcodebuild -workspace alt-tab-macos.xcworkspace \
             -scheme Release \
             -configuration Release \
             -derivedDataPath DerivedData \
             -destination 'platform=macOS,arch=x86_64' \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_ALLOWED=YES \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
             2>&1 | tee build.log
 
       - name: Locate app
         if: always()
         run: |
           find DerivedData/Build/Products -maxdepth 3 -name "*.app" -print 2>/dev/null
+          ls -la DerivedData/Build/Products/Release/AltTab.app/Contents/MacOS/ 2>/dev/null
 
       - name: Ad-hoc sign and package
         if: always()
@@ -44,7 +44,6 @@ jobs:
           APP="$(find DerivedData/Build/Products -maxdepth 3 -name 'AltTab.app' | head -1)"
           echo "APP=$APP"
           if [ -n "$APP" ] && [ -f "$APP/Contents/MacOS/AltTab" ]; then
-            codesign --force --deep --sign - "$APP"
             plutil -replace CFBundleShortVersionString -string "10.12.0" "$APP/Contents/Info.plist"
             plutil -replace CFBundleVersion -string "10.12.0" "$APP/Contents/Info.plist"
             codesign --force --deep --sign - "$APP"
